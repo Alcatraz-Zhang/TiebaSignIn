@@ -23,8 +23,8 @@ jobs:
       - name: Build and execute
         env:
           BDUSS: ${{ secrets.BDUSS }}
+          STOKEN: ${{ secrets.STOKEN }}
           SCKEY: ${{ secrets.SCKEY }}
         run: |
           mvn -B compile exec:java \
-            -Dexec.mainClass="top.srcrs.Run" \
-            -Dexec.args="$BDUSS $SCKEY"
+            -Dexec.mainClass="top.srcrs.Run"
