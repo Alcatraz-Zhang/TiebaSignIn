@@ -40,6 +40,9 @@
 
 在同一个调试界面的 `cookie` 列表中找到 `STOKEN`，并复制其 `Value` 值。
 
+> **⚠️ 注意**：cookie 列表里可能出现两个 `STOKEN`，域分别是 `tieba.baidu.com` 和 `passport.baidu.com`。
+> **请选择域为 `tieba.baidu.com` 的那个**，passport 域下的 STOKEN 作用域不同，发给贴吧接口无效。
+
 **STOKEN 的有效期与 BDUSS 类似（月～年级别），复制一次可以长期使用，不需要定期维护。**
 只有在以下情况下才需要重新获取：
 - 修改了百度账号密码
