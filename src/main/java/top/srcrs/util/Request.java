@@ -1,6 +1,6 @@
 package top.srcrs.util;
 
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson2.JSONObject;
 import org.apache.http.*;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.CookieSpecs;
@@ -39,6 +39,30 @@ public class Request {
     }
 
     ;
+
+    /**
+     * 发送 GET 请求，返回原始 HTML 字符串（用于需要解析页面的场景）。
+     *
+     * @param url 请求地址
+     * @return HTML 字符串，失败时返回 null
+     */
+    public static String getHtml(String url) {
+        RequestConfig defaultConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.STANDARD).build();
+        HttpClient client = HttpClients.custom().setDefaultRequestConfig(defaultConfig).build();
+        HttpGet httpGet = new HttpGet(url);
+        httpGet.addHeader("connection", "keep-alive");
+        httpGet.addHeader("charset", "UTF-8");
+        httpGet.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.71 Safari/537.36");
+        httpGet.addHeader("Cookie", cookie.getCookie());
+        try {
+            HttpResponse resp = client.execute(httpGet);
+            HttpEntity entity = resp.getEntity();
+            return EntityUtils.toString(entity, "UTF-8");
+        } catch (Exception e) {
+            LOGGER.warn("getHtml 请求错误 -- {}", e.getMessage());
+            return null;
+        }
+    }
 
     /**
      * 发送get请求
@@ -86,6 +110,18 @@ public class Request {
      * @Time 2020-10-31
      */
     public static JSONObject post(String url, String body) {
+        return post(url, body, null);
+    }
+
+    /**
+     * 发送 POST 请求，支持自定义 Referer（用于 web 端签到接口）。
+     *
+     * @param url     请求地址
+     * @param body    请求体（application/x-www-form-urlencoded）
+     * @param referer Referer 头，为 null 时不添加
+     * @return JSONObject
+     */
+    public static JSONObject post(String url, String body, String referer) {
         StringEntity entityBody = new StringEntity(body, "UTF-8");
         RequestConfig defaultConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.STANDARD).build();
         HttpClient client = HttpClients.custom().setDefaultRequestConfig(defaultConfig).build();
@@ -96,6 +132,10 @@ public class Request {
         httpPost.addHeader("charset", "UTF-8");
         httpPost.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.71 Safari/537.36");
         httpPost.addHeader("Cookie", cookie.getCookie());
+        if (referer != null && !referer.isEmpty()) {
+            httpPost.addHeader("Referer", referer);
+            httpPost.addHeader("X-Requested-With", "XMLHttpRequest");
+        }
         httpPost.setEntity(entityBody);
         HttpResponse resp = null;
         String respContent = null;

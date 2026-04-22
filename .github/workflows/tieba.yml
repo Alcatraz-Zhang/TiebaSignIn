@@ -17,14 +17,14 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '8'
+          java-version: '17'
           cache: 'maven'  # 使用官方推荐的 Maven 依赖缓存
 
       - name: Build and execute
         env:
           BDUSS: ${{ secrets.BDUSS }}
+          STOKEN: ${{ secrets.STOKEN }}
           SCKEY: ${{ secrets.SCKEY }}
         run: |
           mvn -B compile exec:java \
-            -Dexec.mainClass="top.srcrs.Run" \
-            -Dexec.args="$BDUSS $SCKEY"
+            -Dexec.mainClass="top.srcrs.Run"
