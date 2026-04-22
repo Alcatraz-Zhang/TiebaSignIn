@@ -9,7 +9,7 @@ public class Cookie {
     private static final Cookie cookie = new Cookie();
     private String BDUSS;
     /** 百度新版鉴权所需的 STOKEN，可选。未设置时退化为仅 BDUSS（向后兼容）。 */
-    private String STOKEN;
+    private String stoken;
     private Cookie(){};
 
     public static Cookie getInstance() {
@@ -25,11 +25,11 @@ public class Cookie {
     }
 
     public String getStoken() {
-        return STOKEN;
+        return stoken;
     }
 
     public void setStoken(String stoken) {
-        this.STOKEN = stoken;
+        this.stoken = stoken;
     }
 
     /**
@@ -37,8 +37,8 @@ public class Cookie {
      * 若 STOKEN 已设置则同时携带，否则仅返回 BDUSS（向后兼容旧调用方式）。
      */
     public String getCookie() {
-        if (STOKEN != null && !STOKEN.isEmpty()) {
-            return "BDUSS=" + BDUSS + "; STOKEN=" + STOKEN;
+        if (stoken != null && !stoken.isEmpty()) {
+            return "BDUSS=" + BDUSS + "; STOKEN=" + stoken;
         }
         return "BDUSS=" + BDUSS;
     }

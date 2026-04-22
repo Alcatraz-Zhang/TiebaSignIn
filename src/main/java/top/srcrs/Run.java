@@ -158,7 +158,12 @@ public class Run {
             } catch (Exception e) {
                 LOGGER.error("获取tbs出现错误（第 {}/{} 次）-- {}", attempt, maxRetry, e.getMessage());
                 if (attempt < maxRetry) {
-                    try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    try {
+                        Thread.sleep(3000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        LOGGER.warn("getTbs 重试等待被中断");
+                    }
                 }
             }
         }
@@ -205,7 +210,11 @@ public class Run {
             if (allForums.isEmpty()) return false;
 
             for (String name : allForums) {
-                follow.add(name.replace("+", "%2B"));
+                try {
+                    follow.add(URLEncoder.encode(name, "UTF-8"));
+                } catch (Exception encEx) {
+                    follow.add(name.replace("+", "%2B"));
+                }
             }
             followNum = allForums.size();
             LOGGER.info("从我的关注页获取到 {} 个贴吧（共 {} 页）", followNum, pn - 1);
@@ -225,9 +234,11 @@ public class Run {
             JSONObject data = jsonObject != null ? jsonObject.getJSONObject("data") : null;
             JSONArray jsonArray = data != null ? data.getJSONArray("like_forum") : null;
             if (jsonArray == null) {
-                String preview = jsonObject != null
-                        ? jsonObject.toJSONString().substring(0, Math.min(200, jsonObject.toJSONString().length()))
-                        : "null";
+                String preview = "null";
+                if (jsonObject != null) {
+                    String json = jsonObject.toJSONString();
+                    preview = json.substring(0, Math.min(200, json.length()));
+                }
                 LOGGER.error("获取贴吧列表失败，接口返回: {}", preview);
                 return;
             }
