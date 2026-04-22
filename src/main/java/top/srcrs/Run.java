@@ -26,6 +26,34 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
+ * 签到结果分类枚举
+ */
+enum SignResult {
+    /** 本次首次签到成功（优先级最高） */
+    SUCCESS(0),
+    /** 今日已签到（非失败，不需要重试） */
+    ALREADY_SIGNED(1),
+    /** 暂时性失败，可重试（如签到过快、网络抖动、验证码等） */
+    RETRYABLE(2),
+    /** 永久性失败，不再重试（如贴吧不可用、风控封禁等） */
+    FATAL(3);
+
+    /** 数值越小优先级越高 */
+    private final int priority;
+
+    SignResult(int priority) {
+        this.priority = priority;
+    }
+
+    /**
+     * 返回两个结果中优先级更高（更好）的那个。
+     */
+    public static SignResult best(SignResult a, SignResult b) {
+        return a.priority <= b.priority ? a : b;
+    }
+}
+
+/**
  * 程序运行开始的地方
  *
  * @author srcrs
@@ -50,28 +78,62 @@ public class Run {
      */
     String TBS_URL = "http://tieba.baidu.com/dc/common/tbs";
     /**
-     * 贴吧签到接口（客户端）
+     * 贴吧签到接口（客户端，优先使用，经验值更高）
      */
     String SIGN_URL = "http://c.tieba.baidu.com/c/c/forum/sign";
     /**
-     * 贴吧签到接口（web 端，需要 STOKEN）
+     * 贴吧签到接口（web 端，需要 STOKEN，客户端失败时作为兜底）
      */
     String SIGN_WEB_URL = "https://tieba.baidu.com/sign/add";
+
+    /**
+     * 客户端接口 error_code → SignResult 映射表。
+     * 未在表中的非零 code 视为 FATAL。
+     */
+    private static final Map<String, SignResult> CLIENT_CODE_MAP;
+    static {
+        Map<String, SignResult> m = new HashMap<>();
+        m.put("0",       SignResult.SUCCESS);
+        m.put("160002",  SignResult.ALREADY_SIGNED); // 您之前已经签过了
+        m.put("1989",    SignResult.RETRYABLE);       // 需要验证
+        m.put("2150040", SignResult.RETRYABLE);       // 风控/需要验证
+        m.put("1102",    SignResult.RETRYABLE);       // 签到过快
+        m.put("340006",  SignResult.FATAL);           // 贴吧目前不可用
+        CLIENT_CODE_MAP = Collections.unmodifiableMap(m);
+    }
+
+    /**
+     * Web 接口 no → SignResult 映射表。
+     * 未在表中的非零 no 视为 FATAL。
+     */
+    private static final Map<Integer, SignResult> WEB_CODE_MAP;
+    static {
+        Map<Integer, SignResult> m = new HashMap<>();
+        m.put(0,       SignResult.SUCCESS);
+        m.put(1101,    SignResult.ALREADY_SIGNED); // 已签到
+        m.put(1102,    SignResult.RETRYABLE);       // 签到过快
+        m.put(1989,    SignResult.RETRYABLE);       // 需要验证
+        m.put(2280007, SignResult.RETRYABLE);       // 需要验证
+        m.put(340006,  SignResult.FATAL);           // 贴吧目前不可用
+        WEB_CODE_MAP = Collections.unmodifiableMap(m);
+    }
 
     /**
      * 存储用户所关注的待签到贴吧
      */
     private List<String> follow = new ArrayList<>();
     /**
-     * 签到成功的贴吧列表
+     * 今日首次签到成功的贴吧列表
      */
     private static List<String> success = new ArrayList<>();
-
     /**
-     * 签到失败的贴吧列表
+     * 今日已签到（非失败，无需重试）的贴吧列表
      */
-    private static HashSet<String> failed = new HashSet<String>();
-
+    private static List<String> alreadySigned = new ArrayList<>();
+    /**
+     * 签到真正失败（无法完成签到）的贴吧集合
+     */
+    private static HashSet<String> failed = new HashSet<>();
     /**
      * 失效的贴吧列表
      */
@@ -121,8 +183,10 @@ public class Run {
         run.getTbs();
         run.getFollow();
         run.runSign();
-        LOGGER.info("共 {} 个贴吧 - 成功: {} - 失败: {} - {} ", followNum, success.size(), followNum - success.size(), failed);
-        LOGGER.info("失效 {} 个贴吧: {} ", invalid.size(), invalid);
+        LOGGER.info("共 {} 个贴吧 — 新签到: {} — 已签到(跳过): {} — 失败: {} {} — 失效: {} {}",
+                followNum, success.size(), alreadySigned.size(),
+                failed.size(), failed,
+                invalid.size(), invalid);
 
         // 打印 Cookie 字段（不打印值），便于排查鉴权问题
         String cookieFields = "BDUSS=已设置" + (cookie.getStoken() != null && !cookie.getStoken().isEmpty()
@@ -267,58 +331,88 @@ public class Run {
     }
 
     /**
-     * 使用 web 端接口签到（需要 STOKEN）。
+     * 使用客户端接口签到（优先使用，经验值更高）。
+     * 返回分类后的签到结果。
+     *
+     * @param s 贴吧名（+号已编码为 %2B）
+     * @return SignResult
+     */
+    private SignResult signClient(String s) {
+        try {
+            String rotation = s.replace("%2B", "+");
+            String body = "kw=" + s + "&tbs=" + tbs + "&sign=" + Encryption.enCodeMd5("kw=" + rotation + "tbs=" + tbs + "tiebaclient!!!");
+            JSONObject post = Request.post(SIGN_URL, body);
+            if (post == null) {
+                LOGGER.debug("{}: client签到无响应，将重试", rotation);
+                return SignResult.RETRYABLE;
+            }
+            String errorCode = post.getString("error_code");
+            SignResult result = CLIENT_CODE_MAP.getOrDefault(errorCode, SignResult.FATAL);
+            switch (result) {
+                case SUCCESS:
+                    LOGGER.info("{}: 签到成功 (client)", rotation);
+                    break;
+                case ALREADY_SIGNED:
+                    LOGGER.info("{}: 今日已签到 (client)", rotation);
+                    break;
+                case RETRYABLE:
+                    LOGGER.debug("{}: client签到暂时失败，将重试, error_code={}, msg={}", rotation, errorCode, post.getString("error_msg"));
+                    break;
+                default:
+                    LOGGER.debug("{}: client签到失败, error_code={}, msg={}", rotation, errorCode, post.getString("error_msg"));
+                    break;
+            }
+            return result;
+        } catch (Exception e) {
+            LOGGER.debug("{}: signClient 异常，将重试 -- {}", s, e.getMessage());
+            return SignResult.RETRYABLE;
+        }
+    }
+
+    /**
+     * 使用 web 端接口签到（需要 STOKEN，客户端失败时的兜底）。
+     * 返回分类后的签到结果。
      *
      * @param kw 贴吧名（已解码，无 %2B）
-     * @return 签到成功返回 true
+     * @return SignResult
      */
-    private boolean signWeb(String kw) {
+    private SignResult signWeb(String kw) {
         try {
             String encodedKw = URLEncoder.encode(kw, "UTF-8");
             String body = "ie=utf-8&kw=" + encodedKw + "&tbs=" + tbs;
             String referer = "https://tieba.baidu.com/f?kw=" + encodedKw + "&ie=utf-8";
             JSONObject result = Request.post(SIGN_WEB_URL, body, referer);
-            if (result == null) return false;
+            if (result == null) {
+                LOGGER.debug("{}: web签到无响应，将重试", kw);
+                return SignResult.RETRYABLE;
+            }
             int no = result.getIntValue("no");
-            if (no == 0) {
-                LOGGER.info("{}: 签到成功 (web)", kw);
-                return true;
+            SignResult signResult = WEB_CODE_MAP.getOrDefault(no, SignResult.FATAL);
+            switch (signResult) {
+                case SUCCESS:
+                    LOGGER.info("{}: 签到成功 (web)", kw);
+                    break;
+                case ALREADY_SIGNED:
+                    LOGGER.info("{}: 今日已签到 (web)", kw);
+                    break;
+                case RETRYABLE:
+                    LOGGER.debug("{}: web签到暂时失败，将重试, no={}, error={}", kw, no, result.getString("error"));
+                    break;
+                default:
+                    LOGGER.debug("{}: web签到失败, no={}, error={}", kw, no, result.getString("error"));
+                    break;
             }
-            LOGGER.debug("{}: web签到失败, no={}, error={}", kw, no, result.getString("error"));
-            return false;
+            return signResult;
         } catch (Exception e) {
-            LOGGER.debug("{}: signWeb 异常 -- {}", kw, e.getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * 使用客户端接口签到（原有方式，作为 web 端失败时的 fallback）。
-     *
-     * @param s 贴吧名（+号已编码为 %2B）
-     * @return 签到成功返回 true
-     */
-    private boolean signClient(String s) {
-        try {
-            String rotation = s.replace("%2B", "+");
-            String body = "kw=" + s + "&tbs=" + tbs + "&sign=" + Encryption.enCodeMd5("kw=" + rotation + "tbs=" + tbs + "tiebaclient!!!");
-            JSONObject post = Request.post(SIGN_URL, body);
-            if (post == null) return false;
-            if ("0".equals(post.getString("error_code"))) {
-                LOGGER.info("{}: 签到成功 (client)", rotation);
-                return true;
-            }
-            LOGGER.debug("{}: client签到失败, error_code={}", rotation, post.getString("error_code"));
-            return false;
-        } catch (Exception e) {
-            LOGGER.debug("{}: signClient 异常 -- {}", s, e.getMessage());
-            return false;
+            LOGGER.debug("{}: signWeb 异常，将重试 -- {}", kw, e.getMessage());
+            return SignResult.RETRYABLE;
         }
     }
 
     /**
      * 开始进行签到，每一轮将所有未签到的贴吧进行签到，一共进行 5 轮，全部签到完提前结束。
-     * 优先走 web 端接口，失败时回退到客户端接口。
+     * 优先走客户端接口（经验值更高），失败时回退到 web 端接口。
+     * 已签到、贴吧失效等非重试场景不算作失败，不会继续重试。
      * 若未登录则直接退出，不再空转。
      *
      * @author srcrs
@@ -329,7 +423,7 @@ public class Run {
             LOGGER.warn("未登录，跳过签到（请检查 BDUSS/STOKEN 是否有效）");
             return;
         }
-        Integer flag = 5;
+        int flag = 5;
         try {
             while (!follow.isEmpty() && flag > 0) {
                 LOGGER.info("-----第 {} 轮签到开始-----", 5 - flag + 1);
@@ -341,17 +435,38 @@ public class Run {
                     int randomTime = new Random().nextInt(200) + 300;
                     LOGGER.info("等待 {} 毫秒", randomTime);
                     TimeUnit.MILLISECONDS.sleep(randomTime);
-                    boolean signed = signWeb(rotation);
-                    if (!signed) {
-                        signed = signClient(s);
-                    }
-                    if (signed) {
-                        iterator.remove();
-                        success.add(rotation);
-                        failed.remove(rotation);
-                    } else {
-                        failed.add(rotation);
-                        LOGGER.warn("{}: 签到失败", rotation);
+
+                    // 优先使用客户端接口
+                    SignResult result = signClient(s);
+
+                    // 客户端未完成签到时，尝试 web 端兜底
+                    if (result != SignResult.SUCCESS && result != SignResult.ALREADY_SIGNED) {
+                        SignResult webResult = signWeb(rotation);
+                        // 取"更好"的结果（SUCCESS > ALREADY_SIGNED > RETRYABLE > FATAL）
+                        result = SignResult.best(result, webResult);                    }
+
+                    switch (result) {
+                        case SUCCESS:
+                            iterator.remove();
+                            success.add(rotation);
+                            failed.remove(rotation);
+                            break;
+                        case ALREADY_SIGNED:
+                            iterator.remove();
+                            alreadySigned.add(rotation);
+                            failed.remove(rotation);
+                            break;
+                        case RETRYABLE:
+                            // 留在 follow 队列中，下一轮继续重试
+                            LOGGER.warn("{}: 签到暂时失败，下一轮重试", rotation);
+                            failed.add(rotation);
+                            break;
+                        case FATAL:
+                        default:
+                            iterator.remove();
+                            failed.add(rotation);
+                            LOGGER.warn("{}: 签到失败（不再重试）", rotation);
+                            break;
                     }
                 }
                 if (!follow.isEmpty()) {
@@ -413,18 +528,27 @@ public class Run {
      * @Time 2020-10-31
      */
      public void send(String sckey, boolean loggedIn) {
-        /** 将要推送的数据 */
         String loginStatus = loggedIn ? "已登录" : "未登录（请检查 BDUSS/STOKEN）";
-        String text = "总: " + followNum + " - ";
-        text += "成功: " + success.size() + " 失败: " + (followNum - success.size());
-        String desp = "登录状态: " + loginStatus + "\n\n";
-        desp += "共 " + followNum + " 贴吧\n";
-        desp += "成功: " + success.size() + " 失败: " + (followNum - success.size());
+        int realFailed = failed.size();
+        String description = "登录状态: " + loginStatus + "\n\n";
+        description += "共 " + followNum + " 贴吧\n";
+        description += "新签到: " + success.size() + "\n";
+        description += "已签到(跳过): " + alreadySigned.size() + "\n";
+        description += "失败: " + realFailed + "\n";
+        description += "失效: " + invalid.size();
+        if (realFailed > 0) {
+            List<String> failedList = new ArrayList<>(failed);
+            int max = Math.min(failedList.size(), 20);
+            description += "\n失败贴吧: " + failedList.subList(0, max);
+            if (failedList.size() > max) {
+                description += "...等" + failedList.size() + "个";
+            }
+        }
 
-try {
+        try {
             String token = sckey;
             String title = URLEncoder.encode("百度贴吧自动签到", "UTF-8");
-            String content = URLEncoder.encode(desp, "UTF-8");
+            String content = URLEncoder.encode(description, "UTF-8");
             String urlx = "https://www.pushplus.plus/send?title=" + title + "&content=" + content + "&token=" + token;
             URL url = new URL(urlx);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
