@@ -273,12 +273,13 @@ public class Run {
             }
             if (allForums.isEmpty()) return false;
 
+            // 与 getFollowFromApi 保持一致：存储原始贴吧名（仅将 '+' 转义为 %2B，
+            // 避免在 application/x-www-form-urlencoded 表单中被当作空格）。
+            // 客户端签到接口的 MD5 sign 必须基于原始 kw 计算，web 端签到接口
+            // 内部还会再次 URLEncoder.encode，因此这里不能预先做 URL 编码，
+            // 否则中文贴吧名会出现签名不匹配 / 双重编码导致签到失败。
             for (String name : allForums) {
-                try {
-                    follow.add(URLEncoder.encode(name, "UTF-8"));
-                } catch (Exception encEx) {
-                    follow.add(name.replace("+", "%2B"));
-                }
+                follow.add(name.replace("+", "%2B"));
             }
             followNum = allForums.size();
             LOGGER.info("从我的关注页获取到 {} 个贴吧（共 {} 页）", followNum, pn - 1);
