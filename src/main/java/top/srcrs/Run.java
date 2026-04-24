@@ -262,7 +262,11 @@ public class Run {
                 List<String> pageForums = new ArrayList<>();
                 Matcher m = kwPattern.matcher(html);
                 while (m.find()) {
-                    String kw = URLDecoder.decode(m.group(1), "UTF-8");
+                    // 我的关注页（tieba.baidu.com/f/like/mylike）为 GBK 页面，
+                    // href 中的 kw 是 GBK 百分号编码，必须用 GBK 解码，
+                    // 否则中文贴吧名会变成乱码（如 "战狼女" -> "ս��Ů"），
+                    // 进而导致后续签到接口返回 340006 "贴吧目录出问题啦"。
+                    String kw = URLDecoder.decode(m.group(1), "GBK");
                     if (!allForums.contains(kw) && !pageForums.contains(kw)) {
                         pageForums.add(kw);
                     }
