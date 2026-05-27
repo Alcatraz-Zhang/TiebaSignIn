@@ -10,17 +10,19 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout keep-alive branch
         uses: actions/checkout@v6
         with:
           persist-credentials: true
           fetch-depth: 0
+          ref: keep-alive
 
       - name: Ensure keep-alive every 30 days
         env:
           KEEPALIVE_FILE: ".github/KEEP_ALIVE.md"
           META_FILE: ".github/KEEP_ALIVE_TIMESTAMP"
           MIN_DAYS: "30"
+          TARGET_BRANCH: "keep-alive"
         run: |
           set -euo pipefail
 
@@ -71,4 +73,4 @@ jobs:
             exit 0
           fi
           git commit -m "chore: keep-alive $now_iso"
-          git push
+          git push origin "HEAD:${TARGET_BRANCH}"
