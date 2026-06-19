@@ -1,124 +1,118 @@
 <div align="center"> 
 <h1 align="center">贴吧签到助手</h1>
-<img src="https://img.shields.io/github/issues/LuoSue/TiebaSignIn-1?color=green">
-<img src="https://img.shields.io/github/stars/LuoSue/TiebaSignIn-1?color=yellow">
-<img src="https://img.shields.io/github/forks/LuoSue/TiebaSignIn-1?color=orange">
-<img src="https://img.shields.io/github/license/LuoSue/TiebaSignIn-1?color=ff69b4">
-<img src="https://img.shields.io/github/languages/code-size/LuoSue/TiebaSignIn-1?color=blueviolet">
+<img src="https://img.shields.io/github/issues/Alcatraz-Zhang/TiebaSignIn?color=green">
+<img src="https://img.shields.io/github/stars/Alcatraz-Zhang/TiebaSignIn?color=yellow">
+<img src="https://img.shields.io/github/forks/Alcatraz-Zhang/TiebaSignIn?color=orange">
+<img src="https://img.shields.io/github/license/Alcatraz-Zhang/TiebaSignIn?color=ff69b4">
 </div>
 
-# 简介
+## 简介
 
-每日自动帮你签到所有关注的贴吧，优先使用客户端（手机端）接口（BDUSS 鉴权，经验值更高），客户端失败时自动回退到 web 端接口（需 BDUSS + STOKEN 鉴权），支持超过 200 个贴吧签到。
+每日自动签到百度贴吧所有关注的贴吧，支持超过 200 个。使用 GitHub Actions 定时运行，无需自备服务器。
 
-# 功能
+## 功能
 
-+ 贴吧签到（支持 200 个以上，实际取决于你关注的贴吧总数）
+- **每日自动签到**：北京时间每天早上 6:30 自动执行。
+- **突破 200 个贴吧限制**：自动翻页获取完整关注列表。
+- **客户端接口优先**：使用手机端接口签到，经验值更高。
+- **Web 端兜底**：客户端接口失败时，自动回退到 web 端接口重试。
+- **多轮重试**：最多 5 轮重试，间隔 60–90 秒，自动处理临时性失败。
+- **结果分类统计**：成功、已签到、失效、失败分开统计，不浪费重试次数。
+- **微信推送**：支持通过 PushPlus 推送签到结果（可选）。
+- **自动保活**：使用 `liskin/gh-workflow-keepalive@v1` 保持 GitHub Actions 定时任务长期可用，不产生虚假提交。
 
-+ **优先使用客户端（手机端）接口签到**，经验值更高；客户端失败时自动回退到 web 端接口兜底。
+## 使用方法
 
-+ **多轮重试**：签到过快、需验证等暂时性失败会在后续轮次自动重试（最多 5 轮）。
+### 1. Fork 本项目
 
-+ **智能处理签到结果**：已签到、贴吧失效等非重试场景不再被算作失败，只会出现在对应的统计项里（新签到 / 已签到跳过 / 失败 / 失效），不会浪费重试配额。
+点击右上角 **Fork** 按钮，将仓库复制到自己的 GitHub 账号下。
 
-+ 支持推送运行结果至微信（通过 PushPlus）
+### 2. 启用 Actions
 
-# 使用方法
+进入 Fork 后的仓库：`Settings -> Actions -> General`
 
-## 1. fork 本项目
+- 确保 **Allow all actions and reusable workflows** 已勾选。
+- 保存即可，`workflow-keepalive` job 已自带 `actions: write` 权限，无需授予仓库 `Read and write permissions`。
 
-### 必须检查的仓库设置
+同时检查仓库没有被 Archived：`Settings -> General -> Danger Zone`。
 
-1. Settings -> Actions -> General -> Workflow permissions：选择 "Read and write permissions"（以允许 GITHUB_TOKEN push）。
+### 3. 获取 BDUSS 和 STOKEN
 
-2. 确保仓库没有被 Archived（Settings -> General -> Danger Zone: Archive repository）。
+1. 在浏览器中登录 [百度贴吧](https://tieba.baidu.com/)。
+2. 按 `F12` 打开开发者工具。
+3. 切换到 `Application`（或 `Storage`）-> `Cookies -> https://tieba.baidu.com`。
+4. 分别复制 `BDUSS` 和 `STOKEN` 对应的 `Value`。
 
-## 2. 获取 BDUSS
+> **⚠️ 注意**：`STOKEN` 可能有多个，**请选择域为 `tieba.baidu.com` 的那个**。`passport.baidu.com` 域下的 STOKEN 对贴吧接口无效。
+>
+> 由于百度接口鉴权升级，**仅填 BDUSS 会导致签到失败（返回未登录）**，STOKEN 现在是必填项。
 
-在网页中登录上贴吧，然后按下 `F12` 打开调试模式，在 `cookie` 中找到 `BDUSS`，并复制其 `Value` 值。
+### 4. 添加 Secrets
 
-![](./assets/获取BDUSS.gif)
+进入 `Settings -> Secrets and variables -> Actions -> New repository secret`，添加：
 
-## 3. 获取 STOKEN
+| Name  | 必填 | 说明 |
+| ----- | ---- | ---- |
+| BDUSS | 是   | 贴吧登录凭证 |
+| STOKEN | 是   | 贴吧登录凭证，需与 BDUSS 同时使用 |
+| SCKEY | 否   | PushPlus token，用于微信推送签到结果 |
 
-> **为什么需要 STOKEN？**
-> 百度已升级接口鉴权策略，仅凭 BDUSS 会返回 `is_login=0`（未登录），导致签到全部失败。需要同时携带 STOKEN 才能正常使用。
+### 5. 首次触发 Actions
 
-在同一个调试界面的 `cookie` 列表中找到 `STOKEN`，并复制其 `Value` 值。
+GitHub 默认会暂停 Fork 仓库的 Actions 调度，需要一次真实的 `push` 事件来激活：
 
-> **⚠️ 注意**：cookie 列表里可能出现两个 `STOKEN`，域分别是 `tieba.baidu.com` 和 `passport.baidu.com`。
-> **请选择域为 `tieba.baidu.com` 的那个**，passport 域下的 STOKEN 作用域不同，发给贴吧接口无效。
-
-**STOKEN 的有效期与 BDUSS 类似（月～年级别），复制一次可以长期使用，不需要定期维护。**
-只有在以下情况下才需要重新获取：
-- 修改了百度账号密码
-- 主动退出了贴吧/百度登录
-- 百度安全系统检测到异常并强制重置了 session
-- workflow 日志出现"未登录"提示时
-
-## 4. 将 BDUSS 和 STOKEN 添加到仓库的 Secrets 中
-
-Name | Value | 说明
--|-|-
-BDUSS | xxxxxxxxxxx | 必填
-STOKEN | xxxxxxxxxxx | 必填（不填将因百度鉴权升级而签到失败）
-SCKEY | xxxxxxxxxxx | 选填，PushPlus token，用于推送签到结果到微信
-
-将上面获取到的值粘贴到 `Settings -> Secrets and variables -> Actions -> New repository secret` 中。
-
-![](./assets/添加BDUSS.gif)
-
-> **老用户注意**：如果你之前只配置了 BDUSS，需要额外添加 STOKEN，否则签到会因百度鉴权升级而失败（日志显示"未登录"）。
-
-## 5. 开启 actions
-
-默认 `actions` 是处于禁止的状态，需要手动开启。
-
-![](./assets/开启actions.gif)
-
-## 6. 第一次运行 actions
-
-+ 自己提交一次 `push`。
-
-将 `run.txt` 中的 `flag` 由 `0` 改为 `1`
+1. 打开仓库根目录的 `run.txt`。
+2. 将 `flag` 的值从 `0` 改为 `1`：
 
 ```patch
 - flag: 0
 + flag: 1
 ```
 
-![](./assets/运行结果.gif)
+3. 提交该修改，Actions 将开始正常运行。
 
-## 成功了
+### 6. 完成
 
-每天早上 `6:30` 将会自动进行签到
+每天早上 **北京时间 6:30** 会自动签到。可在 `Actions` 页面查看运行日志。
 
-## 添加 PushPlus 推送
+## 可选：开启 PushPlus 微信推送
 
-需在 Secrets 中添加 PushPlus 的 `SCKEY`（即你的 PushPlus token），格式如下
+在 Secrets 中添加 `SCKEY` 后，每次签到结束会自动推送结果到微信。
 
-Name | Value
--|-
-SCKEY | xxxxxxxxxx
+- 注册/获取 token：[PushPlus 官网](http://www.pushplus.plus/)
+- 将获取到的 token 填入 Secrets 的 `SCKEY` 中
 
-## 2026-5-30
+## 工作原理
 
-+ 代码重构
+### 签到流程
 
-+ 修改 API 以及签到策略
+`tieba.yml` 每天定时运行：
 
-## 2020-11-01
+1. 检出代码并安装 `requests`。
+2. 读取 `BDUSS`、`STOKEN`、`SCKEY`。
+3. 验证登录状态并获取关注贴吧列表。
+4. 逐个使用客户端接口签到；失败时自动使用 web 端接口兜底。
+5. 对需要重试的状态进入下一轮，最多 5 轮。
+6. 汇总结果，若配置了 `SCKEY` 则推送至微信。
 
-+ 代码重构
+### 自动保活
 
-+ 修改签到策略
+GitHub 会在仓库 60 天无活动时自动禁用 schedule workflow。`tieba.yml` 中的 `workflow-keepalive` job 使用 [liskin/gh-workflow-keepalive](https://github.com/liskin/gh-workflow-keepalive) 在每次定时运行时通过 GitHub API 重新启用工作流，**不产生任何虚假提交**。
 
-大大提高一次运行，贴吧签到的成功率，基本很少的贴吧会签到失败。
+## 常见问题
 
-+ 去除多用户的支持
+**Q: 日志提示「未登录」怎么办？**
 
-+ 增加支持server酱推送，可以推送至微信
+A: 检查 Secrets 中的 `BDUSS` 和 `STOKEN` 是否正确，且 `STOKEN` 的域是 `tieba.baidu.com`。修改百度密码或退出登录后需要重新获取。
 
-## 2020-10-19
+**Q: 为什么有些贴吧签到失败？**
 
-~~增加支持多账户签到，每个账号的`BDUSS`使用`&&`分割，具体格式如下。~~
+A: 常见原因包括：贴吧被封禁、账号被风控、接口临时异常。多轮重试会自动处理部分临时失败，最终在日志汇总中可以看到失败贴吧名称。
+
+**Q: 可以关闭微信推送吗？**
+
+A: 不填 `SCKEY` 即可，代码会自动跳过推送。
+
+## 免责声明
+
+本项目仅供学习交流使用，请遵守百度贴吧相关服务条款。因使用本项目导致的账号问题，开发者不承担责任。
