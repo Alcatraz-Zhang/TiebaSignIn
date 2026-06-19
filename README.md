@@ -1,21 +1,23 @@
 <div align="center"> 
-<h1 align="center">贴吧签到助手（PushPlus版）</h1>
-<img src="https://img.shields.io/github/issues/srcrs/TiebaSignIn?color=green">
-<img src="https://img.shields.io/github/stars/srcrs/TiebaSignIn?color=yellow">
-<img src="https://img.shields.io/github/forks/srcrs/TiebaSignIn?color=orange">
-<img src="https://img.shields.io/github/license/srcrs/TiebaSignIn?color=ff69b4">
-<img src="https://img.shields.io/github/languages/code-size/srcrs/TiebaSignIn?color=blueviolet">
+<h1 align="center">贴吧签到助手</h1>
+<img src="https://img.shields.io/github/issues/LuoSue/TiebaSignIn-1?color=green">
+<img src="https://img.shields.io/github/stars/LuoSue/TiebaSignIn-1?color=yellow">
+<img src="https://img.shields.io/github/forks/LuoSue/TiebaSignIn-1?color=orange">
+<img src="https://img.shields.io/github/license/LuoSue/TiebaSignIn-1?color=ff69b4">
+<img src="https://img.shields.io/github/languages/code-size/LuoSue/TiebaSignIn-1?color=blueviolet">
 </div>
 
 # 简介
 
-每日自动帮你签到所有关注的贴吧，使用 web 端接口（BDUSS + STOKEN 鉴权），支持超过 200 个贴吧签到。
+每日自动帮你签到所有关注的贴吧，优先使用客户端（手机端）接口（BDUSS 鉴权，经验值更高），客户端失败时自动回退到 web 端接口（需 BDUSS + STOKEN 鉴权），支持超过 200 个贴吧签到。
 
 # 功能
 
 + 贴吧签到（支持 200 个以上，实际取决于你关注的贴吧总数）
 
 + **优先使用客户端（手机端）接口签到**，经验值更高；客户端失败时自动回退到 web 端接口兜底。
+
++ **多轮重试**：签到过快、需验证等暂时性失败会在后续轮次自动重试（最多 5 轮）。
 
 + **智能处理签到结果**：已签到、贴吧失效等非重试场景不再被算作失败，只会出现在对应的统计项里（新签到 / 已签到跳过 / 失败 / 失效），不会浪费重试配额。
 
@@ -98,6 +100,12 @@ SCKEY | xxxxxxxxxxx | 选填，PushPlus token，用于推送签到结果到微�
 Name | Value
 -|-
 SCKEY | xxxxxxxxxx
+
+## 2026-5-30
+
++ 代码重构
+
++ 修改 API 以及签到策略
 
 ## 2020-11-01
 
