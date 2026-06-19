@@ -12,8 +12,7 @@ import logging
 import os
 import random
 import time
-import urllib.parse
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 import requests
 from tieba_client import TiebaClient, best_result
@@ -70,7 +69,7 @@ def parse_args() -> tuple[str, str]:
 def run_signin(
     client: TiebaClient,
     tbs: str,
-    forums: List[dict],
+    forums: list[dict],
     max_rounds: int = 5,
     sleeper: Optional[Callable[[str, int, int], None]] = None,
 ) -> dict:
@@ -100,7 +99,7 @@ def run_signin(
             tbs = new_tbs
             sleeper("round", round_idx, len(queue))
 
-        next_queue: List[dict] = []
+        next_queue: list[dict] = []
         for idx, forum in enumerate(queue):
             # 同一轮内第一个贴吧不额外等待，后续贴吧按策略节流
             if round_idx > 0 or idx > 0:
@@ -163,11 +162,8 @@ def send_pushplus(
             "content": content,
             "template": "html",
         }
-        url = "http://www.pushplus.plus/send?" + urllib.parse.urlencode(payload)
-        if http is None:
-            r = requests.get(url, timeout=10)
-        else:
-            r = http.get(url, timeout=10)
+        client = http or requests
+        r = client.get("http://www.pushplus.plus/send", params=payload, timeout=10)
         logger.info(f"PushPlus 响应: {r.text[:100]}")
         return True
     except Exception as e:

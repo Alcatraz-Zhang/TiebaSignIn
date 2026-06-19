@@ -4,12 +4,9 @@
 运行: python -m pytest test_tieba.py -v   或   python test_tieba.py
 """
 
-import sys
-import types
 import unittest
 from unittest import mock
 
-import tieba_client
 from tieba_client import TiebaClient, best_status, STATUS_PRIORITY
 import run
 
@@ -33,15 +30,17 @@ class FakeClient:
         self.tbs_calls += 1
         return "faketbs"
 
+    def _next_status(self, script, name):
+        seq = script.get(name, ["fatal"])
+        return seq.pop(0) if seq else "fatal"
+
     def sign_forum(self, fid, name, tbs):
-        seq = self.client_script.get(name, ["fatal"])
-        status = seq.pop(0) if seq else "fatal"
+        status = self._next_status(self.client_script, name)
         return {"status": status, "rank": 1 if status == "success" else None,
                 "message": status}
 
     def sign_forum_web(self, kw, tbs):
-        seq = self.web_script.get(kw, ["fatal"])
-        status = seq.pop(0) if seq else "fatal"
+        status = self._next_status(self.web_script, kw)
         return {"status": status, "rank": None, "message": "web:" + status}
 
 
@@ -221,8 +220,9 @@ class TestPushPlus(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(fake_http.get.called)
         url = fake_http.get.call_args[0][0]
+        params = fake_http.get.call_args[1].get("params", {})
         self.assertIn("pushplus.plus/send", url)
-        self.assertIn("token=mytoken", url)
+        self.assertEqual(params.get("token"), "mytoken")
 
     def test_send_pushplus_empty_token_skips(self):
         fake_http = mock.MagicMock()

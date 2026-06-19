@@ -42,7 +42,6 @@ STATUS_PRIORITY = {
 
 # 客户端 API 错误码分类
 CLIENT_RETRYABLE_CODES = {"1102", "1989", "2150040"}
-CLIENT_FATAL_CODES = {"340006", "2280007", "540002"}
 CLIENT_ALREADY_CODE = "160002"
 
 # web 端 API 错误码分类
@@ -57,7 +56,7 @@ def best_status(a: str, b: str) -> str:
 
 def best_result(a: dict, b: dict) -> dict:
     """返回两个结果中状态较优的完整 dict。"""
-    return a if STATUS_PRIORITY[a["status"]] <= STATUS_PRIORITY[b["status"]] else b
+    return a if best_status(a["status"], b["status"]) == a["status"] else b
 
 
 # ---------- client ----------
@@ -104,16 +103,15 @@ class TiebaClient:
         headers: Optional[dict] = None,
         retry: int = 3,
     ) -> Optional[dict]:
+        merged_headers = dict(HEADERS)
+        if headers:
+            merged_headers.update(headers)
+
         for i in range(retry):
             try:
-                if method.lower() == "get":
-                    resp = self.session.get(url, timeout=10)
-                else:
-                    req_headers = dict(HEADERS)
-                    if headers:
-                        req_headers.update(headers)
-                    resp = self.session.post(url, data=data, headers=req_headers, timeout=10)
-
+                resp = self.session.request(
+                    method.upper(), url, data=data, headers=merged_headers, timeout=10
+                )
                 resp.raise_for_status()
                 if not resp.text.strip():
                     raise ValueError("空响应")
@@ -146,16 +144,12 @@ class TiebaClient:
 
         while True:
             data = {
+                **BASE_SIGN_DATA,
                 "BDUSS": self.bduss,
-                "_client_type": "2",
                 "_client_id": "wappc_1534235498291_488",
-                "_client_version": "9.7.8.0",
-                "_phone_imei": "000000000000000",
                 "from": "1008621y",
                 "page_no": str(page_no),
                 "page_size": "200",
-                "model": "MI+5",
-                "net_type": "1",
                 "timestamp": str(int(time.time())),
                 "vcode_tag": "11",
             }
